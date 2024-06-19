@@ -11,7 +11,28 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
+const MethodChannel _channel =
+    MethodChannel('plugins.flutter.io/camera_windows');
+
 class _MyHomePageState extends State<MyHomePage> {
+  Future<void> startVideoCapturing(VideoCaptureOptions options) async {
+    print('동영상 녹화 시작');
+    await _channel.invokeMethod<void>(
+      'startVideoRecording',
+      <String, dynamic>{
+        'cameraId': options.cameraId,
+        'maxVideoDuration': options.maxDuration?.inMilliseconds,
+        'enableStream': options.streamCallback != null,
+      },
+    );
+    print('동영상 녹화 시작 종료');
+
+    // if (options.streamCallback != null) {
+    //   _installStreamController().stream.listen(options.streamCallback);
+    //   _startStreamListener();
+    // }
+  }
+
   String _cameraInfo = 'Unknown';
   List<CameraDescription> _cameras = <CameraDescription>[];
   int _cameraIndex = 0;
@@ -23,7 +44,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Size? _previewSize;
   MediaSettings _mediaSettings = const MediaSettings(
     resolutionPreset: ResolutionPreset.low,
-    fps: 15,
+    fps: 10,
     videoBitrate: 200000,
     audioBitrate: 32000,
     enableAudio: true,
@@ -87,6 +108,7 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       final int cameraIndex = _cameraIndex % _cameras.length;
       final CameraDescription camera = _cameras[cameraIndex];
+      print('카메라 ${camera.name}');
 
       cameraId = await CameraPlatform.instance.createCameraWithSettings(
         camera,
@@ -117,6 +139,7 @@ class _MyHomePageState extends State<MyHomePage> {
       );
 
       if (mounted) {
+        print('실행');
         setState(() {
           _initialized = true;
           _cameraId = cameraId;
@@ -125,6 +148,7 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       }
     } on CameraException catch (e) {
+      //에러 처리
       try {
         if (cameraId >= 0) {
           await CameraPlatform.instance.dispose(cameraId);
@@ -135,6 +159,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
       // Reset state.
       if (mounted) {
+        print('에러발생');
         setState(() {
           _initialized = false;
           _cameraId = -1;
@@ -222,9 +247,17 @@ class _MyHomePageState extends State<MyHomePage> {
       } else {
         if (!_recording) {
           print('시작');
-          await CameraPlatform.instance.startVideoRecording(_cameraId);
-          // VideoCaptureOptions options = VideoCaptureOptions(_cameraId);
-          // await CameraPlatform.instance.startVideoCapturing(options);
+          try {
+            // await CameraPlatform.instance.startVideoRecording(_cameraId);
+            await startVideoCapturing(
+              VideoCaptureOptions(
+                _cameraId,
+                maxDuration: Duration(milliseconds: 10000),
+              ),
+            );
+          } catch (e) {
+            print('에러 ${e.toString()}');
+          }
         } else {
           final XFile file =
               await CameraPlatform.instance.stopVideoRecording(_cameraId);
@@ -348,7 +381,7 @@ class _MyHomePageState extends State<MyHomePage> {
       scaffoldMessengerKey: _scaffoldMessengerKey,
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('Plugin example app'),
+          title: const Text('포토부스 키오스크 테스트!!!'),
         ),
         body: ListView(
           children: <Widget>[
@@ -365,7 +398,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: const Text('Re-check available cameras'),
               ),
             if (_cameras.isNotEmpty)
-              Row(
+              Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
                   DropdownButton<ResolutionPreset>(
@@ -377,12 +410,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     },
                     items: resolutionItems,
                   ),
-                  const SizedBox(width: 20),
                   const Text('Audio:'),
                   Switch(
                       value: _mediaSettings.enableAudio,
                       onChanged: (bool state) => _onAudioChange(state)),
-                  const SizedBox(width: 20),
                   ElevatedButton(
                     onPressed: _initialized
                         ? _disposeCurrentCamera
@@ -390,19 +421,16 @@ class _MyHomePageState extends State<MyHomePage> {
                     child:
                         Text(_initialized ? 'Dispose camera' : 'Create camera'),
                   ),
-                  const SizedBox(width: 5),
                   ElevatedButton(
                     onPressed: _initialized ? _takePicture : null,
                     child: const Text('Take picture'),
                   ),
-                  const SizedBox(width: 5),
                   ElevatedButton(
                     onPressed: _initialized ? _togglePreview : null,
                     child: Text(
                       _previewPaused ? 'Resume preview' : 'Pause preview',
                     ),
                   ),
-                  const SizedBox(width: 5),
                   ElevatedButton(
                     onPressed: _initialized ? _toggleRecord : null,
                     child: Text(
@@ -411,7 +439,6 @@ class _MyHomePageState extends State<MyHomePage> {
                           : 'Record Video',
                     ),
                   ),
-                  const SizedBox(width: 5),
                   ElevatedButton(
                     onPressed: (_initialized && !_recording && !_recordingTimed)
                         ? () => _recordTimed(5)
